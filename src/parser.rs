@@ -1,7 +1,8 @@
 // <expr>       ::= <term> <expr_opt>
 // <expr_opt>   ::= + <term> <expr_opt> | epsilon
-// <term>       ::= <NUMBER> <term_opt>
-// <term_opt>   ::= * <NUMBER> <term_opt> | epsilon
+// <term>       ::= <factor> <term_opt>
+// <term_opt>   ::= * <factor> <term_opt> | epsilon
+// <factor>     ::= <NUMBER> | (<expr>)
 
 use crate::lexer::{Token, TokenType};
 
@@ -21,14 +22,20 @@ pub enum ExprOpt {
 
 #[derive(Debug)]
 pub struct Term {
-    pub number: f64,
+    pub factor: Factor,
     pub opt: TermOpt,
 }
 
 #[derive(Debug)]
 pub enum TermOpt {
-    TermOpt(f64, Box<TermOpt>),
+    TermOpt(Factor, Box<TermOpt>),
     None,
+}
+
+#[derive(Debug)]
+pub enum Factor {
+    Number(f64),
+    Expr(Box<Expr>),
 }
 
 pub fn parse(mut tokens: Vec<Token>) -> Result<Expr> {
@@ -65,6 +72,18 @@ fn eat<'a>(tokens: &mut Vec<Token<'a>>, ttype: TokenType) -> Result<Token<'a>> {
     }
 }
 
+fn try_eat<'a>(tokens: &mut Vec<Token<'a>>, ttype: TokenType) -> Result<Option<Token<'a>>> {
+    if let Some(token) = tokens.get(0) {
+        if token.ttype == ttype {
+            Ok(Some(eat(tokens, ttype)?))
+        } else {
+            Ok(None)
+        }
+    } else {
+        Ok(None)
+    }
+}
+
 fn expr(tokens: &mut Vec<Token>) -> Result<Expr> {
     let term = term(tokens)?;
     let opt = expr_opt(tokens)?;
@@ -85,29 +104,32 @@ fn expr_opt(tokens: &mut Vec<Token>) -> Result<ExprOpt> {
 }
 
 fn term(tokens: &mut Vec<Token>) -> Result<Term> {
-    let num_tok = eat(tokens, TokenType::Number)?;
+    let factor = factor(tokens)?;
     let opt = term_opt(tokens)?;
 
-    let number = num_tok
-        .value
-        .parse()
-        .with_context(|| format!("invalid number literal: {}", num_tok.value))?;
-
-    Ok(Term { number, opt })
+    Ok(Term { factor, opt })
 }
 
 fn term_opt(tokens: &mut Vec<Token>) -> Result<TermOpt> {
-    if let Some(token) = tokens.get(0) {
-        if token.ttype == TokenType::Multiplication {
-            eat(tokens, TokenType::Multiplication)?;
-            let num_tok = eat(tokens, TokenType::Number)?;
-            let number = num_tok
-                .value
-                .parse()
-                .with_context(|| format!("invalid number literal: {}", num_tok.value))?;
-            return Ok(TermOpt::TermOpt(number, Box::new(term_opt(tokens)?)));
-        }
+    if try_eat(tokens, TokenType::Multiplication)?.is_some() {
+        let factor = factor(tokens)?;
+        Ok(TermOpt::TermOpt(factor, Box::new(term_opt(tokens)?)))
+    } else {
+        Ok(TermOpt::None)
     }
+}
 
-    Ok(TermOpt::None)
+fn factor(tokens: &mut Vec<Token>) -> Result<Factor> {
+    if try_eat(tokens, TokenType::OpeningParen)?.is_some() {
+        let expr = expr(tokens)?;
+        eat(tokens, TokenType::ClosingParen)?;
+        Ok(Factor::Expr(Box::new(expr)))
+    } else {
+        let num_tok = eat(tokens, TokenType::Number)?;
+        let number = num_tok
+            .value
+            .parse()
+            .with_context(|| format!("invalid number literal: {}", num_tok.value))?;
+        Ok(Factor::Number(number))
+    }
 }

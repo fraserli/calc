@@ -13,6 +13,8 @@ pub enum TokenType {
     Number,
     Addition,
     Multiplication,
+    OpeningParen,
+    ClosingParen,
 }
 
 pub fn lex(text: &str) -> Result<Vec<Token>> {
@@ -33,6 +35,18 @@ pub fn lex(text: &str) -> Result<Vec<Token>> {
         } else if char == '*' {
             tokens.push(Token {
                 ttype: Multiplication,
+                value: &text[i..i + 1],
+                pos: i,
+            })
+        } else if char == '(' {
+            tokens.push(Token {
+                ttype: OpeningParen,
+                value: &text[i..i + 1],
+                pos: i,
+            })
+        } else if char == ')' {
+            tokens.push(Token {
+                ttype: ClosingParen,
                 value: &text[i..i + 1],
                 pos: i,
             })
