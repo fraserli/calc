@@ -1,23 +1,26 @@
-// <expr>       ::= <term> <expr_opt>
-// <expr_opt>   ::= + <term> <expr_opt> | epsilon
-// <term>       ::= <factor> <term_opt>
-// <term_opt>   ::= * <factor> <term_opt> | epsilon
-// <factor>     ::= <NUMBER> | (<expr>)
+// <expr>           ::= <term> <expr_opt>
+// <expr_opt>       ::= <expr_operation> <term> <expr_opt>*
+// <expr_operation> ::= '+' | '-'
+// <term>           ::= <factor> <term_opt>
+// <term_opt>       ::= '*' <factor> <term_opt> | epsilon
+// <factor>         ::= '-'* <NUMBER> | '-'* (<expr>)
 
 use crate::lexer::{Token, TokenType};
 
 use anyhow::{bail, Context, Result};
 
+use std::ops::Neg;
+
 #[derive(Debug)]
 pub struct Expr {
     pub term: Term,
-    pub opt: ExprOpt,
+    pub opts: Vec<(ExprOperation, Term)>,
 }
 
 #[derive(Debug)]
-pub enum ExprOpt {
-    ExprOpt(Term, Box<ExprOpt>),
-    None,
+pub enum ExprOperation {
+    Addition,
+    Subtraction,
 }
 
 #[derive(Debug)]
@@ -36,6 +39,34 @@ pub enum TermOpt {
 pub enum Factor {
     Number(f64),
     Expr(Box<Expr>),
+}
+
+impl Neg for Factor {
+    type Output = Self;
+    fn neg(self) -> Self {
+        match self {
+            Self::Number(number) => Self::Number(-number),
+            Self::Expr(e) => {
+                let mut opts = e
+                    .opts
+                    .into_iter()
+                    .map(|(op, term)| match op {
+                        ExprOperation::Addition => (ExprOperation::Subtraction, term),
+                        ExprOperation::Subtraction => (ExprOperation::Addition, term),
+                    })
+                    .collect::<Vec<(ExprOperation, Term)>>();
+                opts.push((ExprOperation::Subtraction, e.term));
+                let expr = Expr {
+                    term: Term {
+                        factor: Factor::Number(0.0),
+                        opt: TermOpt::None,
+                    },
+                    opts,
+                };
+                Factor::Expr(Box::new(expr))
+            }
+        }
+    }
 }
 
 pub fn parse(mut tokens: Vec<Token>) -> Result<Expr> {
@@ -86,21 +117,25 @@ fn try_eat<'a>(tokens: &mut Vec<Token<'a>>, ttype: TokenType) -> Result<Option<T
 
 fn expr(tokens: &mut Vec<Token>) -> Result<Expr> {
     let term = term(tokens)?;
-    let opt = expr_opt(tokens)?;
+    let opts = expr_opt(tokens)?;
 
-    Ok(Expr { term, opt })
+    Ok(Expr { term, opts })
 }
 
-fn expr_opt(tokens: &mut Vec<Token>) -> Result<ExprOpt> {
-    if let Some(token) = tokens.get(0) {
-        if token.ttype == TokenType::Addition {
-            eat(tokens, TokenType::Addition)?;
-            let term = term(tokens)?;
-            return Ok(ExprOpt::ExprOpt(term, Box::new(expr_opt(tokens)?)));
+fn expr_opt(tokens: &mut Vec<Token>) -> Result<Vec<(ExprOperation, Term)>> {
+    let mut opts = Vec::new();
+
+    loop {
+        if try_eat(tokens, TokenType::Addition)?.is_some() {
+            opts.push((ExprOperation::Addition, term(tokens)?))
+        } else if try_eat(tokens, TokenType::Subtraction)?.is_some() {
+            opts.push((ExprOperation::Subtraction, term(tokens)?))
+        } else {
+            break;
         }
     }
 
-    Ok(ExprOpt::None)
+    Ok(opts)
 }
 
 fn term(tokens: &mut Vec<Token>) -> Result<Term> {
@@ -120,16 +155,23 @@ fn term_opt(tokens: &mut Vec<Token>) -> Result<TermOpt> {
 }
 
 fn factor(tokens: &mut Vec<Token>) -> Result<Factor> {
-    if try_eat(tokens, TokenType::OpeningParen)?.is_some() {
+    if try_eat(tokens, TokenType::Subtraction)?.is_some() {
+        Ok(-factor(tokens)?)
+    } else if try_eat(tokens, TokenType::OpeningParen)?.is_some() {
         let expr = expr(tokens)?;
         eat(tokens, TokenType::ClosingParen)?;
         Ok(Factor::Expr(Box::new(expr)))
     } else {
-        let num_tok = eat(tokens, TokenType::Number)?;
-        let number = num_tok
-            .value
-            .parse()
-            .with_context(|| format!("invalid number literal: {}", num_tok.value))?;
+        let number = number(tokens)?;
         Ok(Factor::Number(number))
     }
+}
+
+fn number(tokens: &mut Vec<Token>) -> Result<f64> {
+    let num_tok = eat(tokens, TokenType::Number)?;
+    let number = num_tok
+        .value
+        .parse()
+        .with_context(|| format!("invalid number literal: {}", num_tok.value))?;
+    Ok(number)
 }

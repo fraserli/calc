@@ -1,18 +1,17 @@
-use crate::parser::{Expr, ExprOpt, Factor, Term, TermOpt};
+use crate::parser::{Expr, ExprOperation, Factor, Term, TermOpt};
 
 impl Expr {
     pub fn eval(&self) -> f64 {
-        self.term.eval() + self.opt.eval()
-    }
-}
+        let mut total = self.term.eval();
 
-impl ExprOpt {
-    pub fn eval(&self) -> f64 {
-        if let ExprOpt::ExprOpt(term, opt) = self {
-            term.eval() + opt.eval()
-        } else {
-            0.0
+        for (op, term) in self.opts.iter() {
+            match op {
+                ExprOperation::Addition => total += term.eval(),
+                ExprOperation::Subtraction => total -= term.eval(),
+            }
         }
+
+        total
     }
 }
 

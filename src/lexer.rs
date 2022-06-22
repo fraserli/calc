@@ -12,6 +12,7 @@ pub enum TokenType {
     Identifier,
     Number,
     Addition,
+    Subtraction,
     Multiplication,
     OpeningParen,
     ClosingParen,
@@ -26,55 +27,40 @@ pub fn lex(text: &str) -> Result<Vec<Token>> {
     while let Some((i, char)) = iter.next() {
         if char.is_whitespace() {
             continue;
-        } else if char == '+' {
-            tokens.push(Token {
-                ttype: Addition,
-                value: &text[i..i + 1],
-                pos: i,
-            })
-        } else if char == '*' {
-            tokens.push(Token {
-                ttype: Multiplication,
-                value: &text[i..i + 1],
-                pos: i,
-            })
-        } else if char == '(' {
-            tokens.push(Token {
-                ttype: OpeningParen,
-                value: &text[i..i + 1],
-                pos: i,
-            })
-        } else if char == ')' {
-            tokens.push(Token {
-                ttype: ClosingParen,
-                value: &text[i..i + 1],
-                pos: i,
-            })
-        } else if char.is_ascii_digit() {
-            let start = i;
-            let mut end = i + 1;
-            while let Some((i, _)) = iter.next_if(|(_, c)| c.is_ascii_digit()) {
-                end = i + 1;
-            }
-            tokens.push(Token {
-                ttype: Number,
-                value: &text[start..end],
-                pos: start,
-            });
-        } else if char.is_ascii() {
-            let start = i;
-            let mut end = i + 1;
-            while let Some((i, _)) = iter.next_if(|(_, c)| !c.is_whitespace()) {
-                end = i + 1;
-            }
-            tokens.push(Token {
-                ttype: Identifier,
-                value: &text[start..end],
-                pos: start,
-            });
-        } else {
-            bail!("invalid character: '{char}'");
         }
+
+        let (ttype, value) = match char {
+            '+' => (Addition, &text[i..i + 1]),
+            '-' => (Subtraction, &text[i..i + 1]),
+            '*' => (Multiplication, &text[i..i + 1]),
+            '(' => (OpeningParen, &text[i..i + 1]),
+            ')' => (ClosingParen, &text[i..i + 1]),
+            _ => {
+                if char.is_ascii_digit() {
+                    let start = i;
+                    let mut end = i + 1;
+                    while let Some((i, _)) = iter.next_if(|(_, c)| c.is_ascii_digit()) {
+                        end = i + 1;
+                    }
+                    (Number, &text[start..end])
+                } else if char.is_ascii() {
+                    let start = i;
+                    let mut end = i + 1;
+                    while let Some((i, _)) = iter.next_if(|(_, c)| !c.is_whitespace()) {
+                        end = i + 1;
+                    }
+                    (Identifier, &text[start..end])
+                } else {
+                    bail!("invalid character: '{char}'");
+                }
+            }
+        };
+
+        tokens.push(Token {
+            ttype,
+            value,
+            pos: i,
+        });
     }
 
     Ok(tokens)
