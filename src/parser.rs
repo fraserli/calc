@@ -155,7 +155,9 @@ fn term_opt(tokens: &mut Vec<Token>) -> Result<TermOpt> {
 }
 
 fn factor(tokens: &mut Vec<Token>) -> Result<Factor> {
-    if try_eat(tokens, TokenType::Subtraction)?.is_some() {
+    if try_eat(tokens, TokenType::Addition)?.is_some() {
+        Ok(factor(tokens)?)
+    } else if try_eat(tokens, TokenType::Subtraction)?.is_some() {
         Ok(-factor(tokens)?)
     } else if try_eat(tokens, TokenType::OpeningParen)?.is_some() {
         let expr = expr(tokens)?;
